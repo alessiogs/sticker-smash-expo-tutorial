@@ -1,7 +1,4 @@
-import * as ImagePicker from "expo-image-picker"
-import { useState } from "react"
-import { ImageSourcePropType, StyleSheet, View } from "react-native"
-
+import PlaceholderImage from "@/assets/images/background-image.png"
 import Button from "@/components/Button"
 import CircleButton from "@/components/CircleButton"
 import EmojiList from "@/components/EmojiList"
@@ -9,10 +6,24 @@ import EmojiPicker from "@/components/EmojiPicker"
 import EmojiSticker from "@/components/EmojiSticker"
 import IconButton from "@/components/IconButton"
 import ImageViewer from "@/components/ImageViewer"
-
-const PlaceholderImage = require("@/assets/images/background-image.png")
+import domtoimage from "dom-to-image"
+import * as ImagePicker from "expo-image-picker"
+import * as MediaLibrary from "expo-media-library"
+import { useEffect, useRef, useState } from "react"
+import { ImageSourcePropType, Platform, StyleSheet, View } from "react-native"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
+import { captureRef } from "react-native-view-shot"
 
 export default function Index() {
+  const imageRef = useRef<View>(null)
+  const [permissionResponse, requestPermission] = MediaLibrary.usePermissions()
+
+  useEffect(() => {
+    if (!permissionResponse?.granted) {
+      requestPermission()
+    }
+  }, [])
+
   const [selectedImage, setSelectedImage] = useState<string | undefined>(
     undefined,
   )
@@ -50,16 +61,49 @@ export default function Index() {
   }
 
   const onSaveImageAsync = async () => {
-    // we will implement this later
+    if (Platform.OS !== "web") {
+      try {
+        const localUri = await captureRef(imageRef, {
+          height: 440,
+          quality: 1,
+        })
+
+        await MediaLibrary.saveToLibraryAsync(localUri)
+        if (localUri) {
+          alert("Saved!")
+        }
+      } catch (e) {
+        console.log(e)
+      }
+    } else {
+      try {
+        if (!imageRef.current) return
+        const node = imageRef.current as unknown as HTMLElement
+        const dataUrl = await domtoimage.toJpeg(node, {
+          quality: 0.95,
+          width: 320,
+          height: 440,
+        })
+
+        let link = document.createElement("a")
+        link.download = "sticker-smash.jpeg"
+        link.href = dataUrl
+        link.click()
+      } catch (e) {
+        console.log(e)
+      }
+    }
   }
 
   return (
-    <View style={styles.container}>
+    <GestureHandlerRootView style={styles.container}>
       <View style={styles.imageContainer}>
-        <ImageViewer
-          imgSource={PlaceholderImage}
-          selectedImage={selectedImage}
-        />
+        <View ref={imageRef} collapsable={false}>
+          <ImageViewer
+            imgSource={PlaceholderImage}
+            selectedImage={selectedImage}
+          />
+        </View>
         {pickedEmoji && (
           <EmojiSticker imageSize={40} stickerSource={pickedEmoji} />
         )}
@@ -92,7 +136,7 @@ export default function Index() {
       <EmojiPicker isVisible={isModalVisible} onClose={onModalClose}>
         <EmojiList onSelect={setPickedEmoji} onCloseModal={onModalClose} />
       </EmojiPicker>
-    </View>
+    </GestureHandlerRootView>
   )
 }
 
